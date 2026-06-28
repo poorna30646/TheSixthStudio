@@ -1,0 +1,45 @@
+# ==========================
+# Environment Variables
+# ==========================
+.env
+client/.env
+server/.env
+
+# ==========================
+# Dependencies
+# ==========================
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# ==========================
+# Logs
+# ==========================
+*.log
+logs/
+server/logs/
+
+# ==========================
+# Uploads
+# ==========================
+uploads/
+server/uploads/
+
+# ==========================
+# Build
+# ==========================
+client/build/
+client/dist/
+server/dist/
+
+# ==========================
+# IDE
+# ==========================
+.vscode/
+.idea/
+
+# ==========================
+# Operating System
+# ==========================
+.DS_Store
+Thumbs.db
