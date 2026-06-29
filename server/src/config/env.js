@@ -14,6 +14,7 @@ const env = {
   AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
   AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
   AWS_ROOT_FOLDER: process.env.AWS_ROOT_FOLDER,
+  REDIS_URL: process.env.REDIS_URL,
 };
 
 export default Object.freeze(env);

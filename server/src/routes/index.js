@@ -7,6 +7,7 @@ import assetRoutes from "../modules/assets/asset.routes.js";
 import projectRoutes from "../modules/projects/project.routes.js";
 import templateRoutes from "../modules/templates/template.routes.js";
 import voiceRoutes from "../modules/voices/voice.routes.js";
+import videoRoutes from "../modules/videos/video.routes.js";
 
 const router = express.Router();
 
@@ -17,5 +18,6 @@ router.use("/assets", assetRoutes);
 router.use("/projects", projectRoutes);
 router.use("/templates", templateRoutes);
 router.use("/voices", voiceRoutes);
+router.use("/videos", videoRoutes);
 
 export default router;
