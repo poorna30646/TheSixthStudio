@@ -98,6 +98,11 @@ const videoSchema = new mongoose.Schema(
             max: 86400,
             required: true,
         },
+        renderedAt: {
+            type: Date,
+            default: null,
+            index: true,
+        },
         deletedAt: {
             type: Date,
             default: null,

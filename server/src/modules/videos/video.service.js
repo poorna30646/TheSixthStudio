@@ -253,6 +253,7 @@ export const completeVideoRender = async (
             status: "completed",
             renderProgress: 100,
             outputUrl,
+            renderedAt: new Date(),
             ...(thumbnail !== undefined ? { thumbnail } : {}),
             ...(duration !== undefined ? { duration } : {}),
         }
