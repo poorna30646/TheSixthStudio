@@ -1,4 +1,4 @@
-    const timestamp = () => new Date().toISOString();
+const timestamp = () => new Date().toISOString();
 
 const logger = {
   info(message) {

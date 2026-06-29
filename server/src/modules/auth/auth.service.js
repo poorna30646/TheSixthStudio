@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-import '../../config/env.js';
+import env from '../../config/env.js';
 import authRepository from './auth.repository.js';
 
 class ServiceError extends Error {
@@ -13,8 +13,8 @@ class ServiceError extends Error {
 
 class AuthService {
   constructor() {
-    this.accessTokenSecret = process.env.JWT_ACCESS_SECRET;
-    this.refreshTokenSecret = process.env.JWT_REFRESH_SECRET;
+    this.accessTokenSecret = env.JWT_ACCESS_SECRET;
+    this.refreshTokenSecret = env.JWT_REFRESH_SECRET;
     if (!this.accessTokenSecret) {
       throw new ServiceError(
         'JWT_ACCESS_SECRET environment variable is required',
@@ -29,14 +29,8 @@ class AuthService {
         500
       );
     }
-    this.accessTokenExpire =
-      process.env.JWT_ACCESS_EXPIRES_IN ||
-      process.env.JWT_ACCESS_EXPIRE ||
-      '15m';
-    this.refreshTokenExpire =
-      process.env.JWT_REFRESH_EXPIRES_IN ||
-      process.env.JWT_REFRESH_EXPIRE ||
-      '7d';
+    this.accessTokenExpire = env.JWT_ACCESS_EXPIRES_IN;
+    this.refreshTokenExpire = env.JWT_REFRESH_EXPIRES_IN;
     this.tokenHashAlgorithm = 'sha256';
     this.extensionHooks = {
       onRegister: [],
@@ -108,8 +102,13 @@ class AuthService {
 
   verifyAccessToken(token) {
     try {
-      return jwt.verify(token, this.accessTokenSecret);
+      const decoded = jwt.verify(token, this.accessTokenSecret);
+      if (decoded.type !== 'access') {
+        throw new ServiceError('Invalid access token', 'INVALID_TOKEN', 401);
+      }
+      return decoded;
     } catch (error) {
+      if (error instanceof ServiceError) throw error;
       if (error.name === 'TokenExpiredError') {
         throw new ServiceError('Access token has expired', 'TOKEN_EXPIRED', 401);
       }
@@ -122,8 +121,13 @@ class AuthService {
 
   verifyRefreshToken(token) {
     try {
-      return jwt.verify(token, this.refreshTokenSecret);
+      const decoded = jwt.verify(token, this.refreshTokenSecret);
+      if (decoded.type !== 'refresh') {
+        throw new ServiceError('Invalid refresh token', 'INVALID_TOKEN', 401);
+      }
+      return decoded;
     } catch (error) {
+      if (error instanceof ServiceError) throw error;
       if (error.name === 'TokenExpiredError') {
         throw new ServiceError('Refresh token has expired', 'TOKEN_EXPIRED', 401);
       }

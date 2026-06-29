@@ -26,6 +26,7 @@ router.post(
 
 router.post(
   "/refresh-token",
+  authValidation.validateRefreshToken,
   authController.refreshAccessToken
 );
 

@@ -6,7 +6,8 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon --legacy-watch src/server.js",
+    "audit": "node scripts/audit.mjs"
   },
   "keywords": [
     "express",
