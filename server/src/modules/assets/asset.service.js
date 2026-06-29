@@ -10,6 +10,7 @@ import {
 import assetRepository from "./asset.repository.js";
 import projectRepository from "../projects/project.repository.js";
 import { assertProjectOwnership } from "../projects/project.service.js";
+import templateRepository from "../templates/template.repository.js";
 
 const typeFromMimeType = (mimeType) => {
     const [group] = String(mimeType).toLowerCase().split("/");
@@ -165,6 +166,7 @@ export const deleteAsset = async (assetId, user) => {
     if (asset.project) {
         await projectRepository.removeAsset(asset.project, asset._id);
     }
+    await templateRepository.removeAssetReferences(asset._id);
     return deletedAsset;
 };
 

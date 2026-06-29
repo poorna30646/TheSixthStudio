@@ -44,6 +44,15 @@ class AssetRepository {
         return this.model.findOne(filter);
     }
 
+    async findAccessibleByIds(assetIds, user) {
+        const filter = {
+            _id: { $in: assetIds },
+            status: { $ne: "deleted" },
+        };
+        if (user.role !== "admin") filter.user = user.userId;
+        return this.model.find(filter);
+    }
+
     async list(user, options) {
         const {
             page = 1,
