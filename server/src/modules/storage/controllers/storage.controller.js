@@ -7,7 +7,7 @@ import { generatePresignedDownloadUrl } from "../services/signedUrl.service.js";
 export const getUploadUrl = asyncHandler(async (req, res) => {
     const result = await createUploadUrl({
         ...req.body,
-        userId: req.user.userId,
+        user: req.user,
     });
 
     res.status(200).json(

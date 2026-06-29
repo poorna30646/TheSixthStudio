@@ -140,6 +140,10 @@ class AssetRepository {
             { new: true }
         );
     }
+
+    async hardDeleteById(assetId) {
+        return this.model.findByIdAndDelete(assetId);
+    }
 }
 
 export default new AssetRepository(Asset);

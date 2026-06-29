@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import ApiError from "../../../utils/ApiError.js";
 import { createPendingAsset } from "../../assets/asset.service.js";
+import { assertProjectOwnership } from "../../projects/project.service.js";
 import { S3_ROOT_FOLDER } from "../config/s3.config.js";
 import {
     assertValidUploadMetadata,
@@ -28,8 +29,9 @@ export const createUploadUrl = async ({
     folder,
     projectId,
     expiresIn,
-    userId,
+    user,
 }) => {
+    const userId = user.userId;
     let validated;
 
     try {
@@ -42,6 +44,10 @@ export const createUploadUrl = async ({
         });
     } catch (error) {
         throw new ApiError(422, error.message);
+    }
+
+    if (validated.policy.scope === "project") {
+        await assertProjectOwnership(projectId, user);
     }
 
     const key = buildObjectKey({

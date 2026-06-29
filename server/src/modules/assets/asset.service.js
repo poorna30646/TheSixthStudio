@@ -8,6 +8,8 @@ import {
     getObjectMetadata,
 } from "../storage/services/signedUrl.service.js";
 import assetRepository from "./asset.repository.js";
+import projectRepository from "../projects/project.repository.js";
+import { assertProjectOwnership } from "../projects/project.service.js";
 
 const typeFromMimeType = (mimeType) => {
     const [group] = String(mimeType).toLowerCase().split("/");
@@ -41,6 +43,17 @@ const getAssetOrThrow = async (assetId, user) => {
     return asset;
 };
 
+const attachAssetToProject = async (asset) => {
+    if (!asset.project) return asset;
+    try {
+        await projectRepository.addAsset(asset.project, asset._id);
+        return asset;
+    } catch (error) {
+        await assetRepository.hardDeleteById(asset._id);
+        throw error;
+    }
+};
+
 export const createPendingAsset = async ({
     userId,
     projectId,
@@ -50,8 +63,8 @@ export const createPendingAsset = async ({
     extension,
     size,
     originalName,
-}) =>
-    assetRepository.create({
+}) => {
+    const asset = await assetRepository.create({
         user: userId,
         project: projectId || null,
         type: typeFromMimeType(mimeType),
@@ -65,6 +78,8 @@ export const createPendingAsset = async ({
         metadata: { originalName },
         isPublic: false,
     });
+    return attachAssetToProject(asset);
+};
 
 export const createAsset = async ({ key, metadata = {}, isPublic, user }) => {
     assertObjectKeyAccess(key, user);
@@ -72,6 +87,9 @@ export const createAsset = async ({ key, metadata = {}, isPublic, user }) => {
     assertUploaderAccess(objectMetadata, user);
 
     const keyDetails = assertObjectKeyAccess(key, user);
+    if (keyDetails.projectId) {
+        await assertProjectOwnership(keyDetails.projectId, user);
+    }
     const mimeType = objectMetadata.ContentType?.toLowerCase();
     const extension = path.extname(key).slice(1).toLowerCase();
 
@@ -79,7 +97,7 @@ export const createAsset = async ({ key, metadata = {}, isPublic, user }) => {
         throw new ApiError(422, "S3 object metadata is incomplete");
     }
 
-    return assetRepository.create({
+    const asset = await assetRepository.create({
         user: objectMetadata.Metadata?.["uploaded-by"] || user.userId,
         project: keyDetails.projectId || null,
         type: typeFromMimeType(mimeType),
@@ -96,6 +114,7 @@ export const createAsset = async ({ key, metadata = {}, isPublic, user }) => {
         },
         isPublic: isPublic ?? false,
     });
+    return attachAssetToProject(asset);
 };
 
 export const listAssets = (user, filters) =>
@@ -142,7 +161,11 @@ export const deleteAsset = async (assetId, user) => {
         if (error.statusCode !== 404) throw error;
     }
 
-    return assetRepository.markDeletedById(asset._id);
+    const deletedAsset = await assetRepository.markDeletedById(asset._id);
+    if (asset.project) {
+        await projectRepository.removeAsset(asset.project, asset._id);
+    }
+    return deletedAsset;
 };
 
 export default {
