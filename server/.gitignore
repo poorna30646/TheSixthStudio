@@ -6,6 +6,16 @@ client/.env
 server/.env
 
 # ==========================
+# AWS Credentials
+# ==========================
+.aws/
+.env.aws
+.env.aws.*
+aws-credentials.json
+aws-credentials.csv
+accessKeys.csv
+
+# ==========================
 # Dependencies
 # ==========================
 node_modules/
