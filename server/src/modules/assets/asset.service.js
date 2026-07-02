@@ -1,4 +1,3 @@
-import path from "node:path";
 import ApiError from "../../utils/ApiError.js";
 import { S3_BUCKET_NAME } from "../storage/config/s3.config.js";
 import { deleteObject } from "../storage/services/delete.service.js";
@@ -36,6 +35,44 @@ const originalNameFromMetadata = (metadata, fallback) => {
         );
     } catch {
         return fallback;
+    }
+};
+
+export const assertUploadedObjectMatchesPendingAsset = (
+    objectMetadata,
+    pendingAsset,
+    user
+) => {
+    assertUploaderAccess(objectMetadata, user, { allowAdmin: false });
+
+    const mimeType = objectMetadata.ContentType?.toLowerCase();
+    if (
+        objectMetadata.ContentLength !== pendingAsset.size ||
+        mimeType !== pendingAsset.mimeType
+    ) {
+        throw new ApiError(
+            422,
+            "Uploaded object does not match the reserved size and MIME type"
+        );
+    }
+
+    if (objectMetadata.ServerSideEncryption !== "AES256") {
+        throw new ApiError(
+            422,
+            "Uploaded object does not use the required server-side encryption"
+        );
+    }
+
+    const expectedOriginalName = pendingAsset.metadata?.originalName;
+    const uploadedOriginalName = originalNameFromMetadata(objectMetadata);
+    if (
+        !expectedOriginalName ||
+        uploadedOriginalName !== expectedOriginalName
+    ) {
+        throw new ApiError(
+            422,
+            "Uploaded object does not match the reserved original file name"
+        );
     }
 };
 
@@ -84,39 +121,48 @@ export const createPendingAsset = async ({
 };
 
 export const createAsset = async ({ key, metadata = {}, isPublic, user }) => {
-    assertObjectKeyAccess(key, user);
-    const objectMetadata = await getObjectMetadata(key);
-    assertUploaderAccess(objectMetadata, user);
-
     const keyDetails = assertObjectKeyAccess(key, user);
+
     if (keyDetails.projectId) {
         await assertProjectOwnership(keyDetails.projectId, user);
     }
-    const mimeType = objectMetadata.ContentType?.toLowerCase();
-    const extension = path.extname(key).slice(1).toLowerCase();
 
-    if (!mimeType || !objectMetadata.ContentLength) {
-        throw new ApiError(422, "S3 object metadata is incomplete");
+    const pendingAsset = await assetRepository.findPendingByKeyForUser(
+        key,
+        user.userId
+    );
+    if (!pendingAsset) {
+        throw new ApiError(404, "Pending asset not found");
     }
 
-    const asset = await assetRepository.create({
-        user: objectMetadata.Metadata?.["uploaded-by"] || user.userId,
-        project: keyDetails.projectId || null,
-        type: typeFromMimeType(mimeType),
-        category: keyDetails.category,
+    const objectMetadata = await getObjectMetadata(key);
+    assertUploadedObjectMatchesPendingAsset(
+        objectMetadata,
+        pendingAsset,
+        user
+    );
+
+    const asset = await assetRepository.finalizePendingByKey(
         key,
-        url: storageUrl(key),
-        mimeType,
-        extension,
-        size: objectMetadata.ContentLength,
-        status: "ready",
-        metadata: {
-            ...metadata,
-            originalName: originalNameFromMetadata(objectMetadata, key),
-        },
-        isPublic: isPublic ?? false,
-    });
-    return attachAssetToProject(asset);
+        user.userId,
+        {
+            metadata: {
+                ...pendingAsset.metadata,
+                ...metadata,
+                originalName: originalNameFromMetadata(
+                    objectMetadata,
+                    pendingAsset.metadata?.originalName || key
+                ),
+            },
+            isPublic: isPublic ?? false,
+        }
+    );
+
+    if (!asset) {
+        throw new ApiError(409, "Asset is no longer pending");
+    }
+
+    return asset;
 };
 
 export const listAssets = (user, filters) =>
@@ -133,23 +179,6 @@ export const updateAsset = async (assetId, changes, user) => {
         update.metadata = { ...asset.metadata, ...changes.metadata };
     }
     if (changes.isPublic !== undefined) update.isPublic = changes.isPublic;
-
-    if (changes.status !== undefined) {
-        if (changes.status === "ready") {
-            const objectMetadata = await getObjectMetadata(asset.key);
-            assertUploaderAccess(objectMetadata, user);
-            if (
-                objectMetadata.ContentLength !== asset.size ||
-                objectMetadata.ContentType?.toLowerCase() !== asset.mimeType
-            ) {
-                throw new ApiError(
-                    422,
-                    "Uploaded object does not match the asset metadata"
-                );
-            }
-        }
-        update.status = changes.status;
-    }
 
     return assetRepository.updateById(asset._id, update);
 };

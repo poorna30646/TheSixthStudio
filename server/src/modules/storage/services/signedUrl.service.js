@@ -4,9 +4,12 @@ import {
     PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import logger from "../../../config/logger.js";
 import ApiError from "../../../utils/ApiError.js";
 import s3Client, {
     S3_BUCKET_NAME,
+    S3_EXPECTED_BUCKET_OWNER,
+    S3_REGION,
     S3_ROOT_FOLDER,
 } from "../config/s3.config.js";
 import { assertValidStorageKey } from "../validators/storage.validation.js";
@@ -52,6 +55,7 @@ const throwStorageError = (error, action) => {
     }
 
     const statusCode = error?.$metadata?.httpStatusCode;
+
     if (
         error?.name === "NotFound" ||
         error?.name === "NoSuchKey" ||
@@ -62,6 +66,20 @@ const throwStorageError = (error, action) => {
 
     throw new ApiError(502, `Unable to ${action} storage object`);
 };
+
+export const buildHeadObjectFailureDiagnostic = (error, commandInput) => ({
+    event: "s3_head_object_failed",
+    bucket: commandInput.Bucket,
+    key: commandInput.Key,
+    region: S3_REGION,
+    awsAccountOwner: commandInput.ExpectedBucketOwner,
+    requestId: error?.$metadata?.requestId,
+    extendedRequestId: error?.$metadata?.extendedRequestId,
+    sdkErrorName: error?.name,
+    sdkErrorMessage: error?.message,
+    sdkMetadata: error?.$metadata,
+    headObjectCommandInput: JSON.parse(JSON.stringify(commandInput)),
+});
 
 export const assertObjectKeyAccess = (key, user) => {
     try {
@@ -133,23 +151,34 @@ export const assertObjectKeyAccess = (key, user) => {
 };
 
 export const getObjectMetadata = async (key) => {
+    const commandInput = {
+    Bucket: S3_BUCKET_NAME,
+    Key: key,
+};
+
     try {
         return await s3Client.send(
-            new HeadObjectCommand({
-                Bucket: S3_BUCKET_NAME,
-                Key: key,
-            })
+            new HeadObjectCommand(commandInput)
         );
     } catch (error) {
+        logger.error(
+            JSON.stringify(
+                buildHeadObjectFailureDiagnostic(error, commandInput)
+            )
+        );
         throwStorageError(error, "read");
     }
 };
 
-export const assertUploaderAccess = (metadata, user) => {
+export const assertUploaderAccess = (
+    metadata,
+    user,
+    { allowAdmin = true } = {}
+) => {
     const uploadedBy = metadata?.Metadata?.["uploaded-by"];
 
     if (
-        user.role !== "admin" &&
+        (!allowAdmin || user.role !== "admin") &&
         (!uploadedBy || uploadedBy !== String(user.userId))
     ) {
         throw new ApiError(403, "You cannot access this storage object");
@@ -174,15 +203,20 @@ export const generatePresignedUploadUrl = async ({
         const command = new PutObjectCommand({
             Bucket: S3_BUCKET_NAME,
             Key: key,
+            ExpectedBucketOwner: S3_EXPECTED_BUCKET_OWNER,
             ContentType: mimeType,
             ContentLength: fileSize,
+            IfNoneMatch: "*",
             ServerSideEncryption: serverSideEncryption,
             Metadata: metadata,
         });
 
         const uploadUrl = await getSignedUrl(s3Client, command, {
             expiresIn: normalizeExpiry(expiresIn),
-            signableHeaders: new Set(["content-type"]),
+            signableHeaders: new Set([
+                "content-type",
+                "if-none-match",
+            ]),
             unhoistableHeaders: new Set([
                 "x-amz-meta-uploaded-by",
                 "x-amz-meta-original-name",
@@ -195,6 +229,7 @@ export const generatePresignedUploadUrl = async ({
             requiredHeaders: {
                 "Content-Type": mimeType,
                 "Content-Length": String(fileSize),
+                "If-None-Match": "*",
                 "x-amz-server-side-encryption": serverSideEncryption,
                 "x-amz-meta-uploaded-by": metadata["uploaded-by"],
                 "x-amz-meta-original-name": metadata["original-name"],
@@ -222,6 +257,7 @@ export const generatePresignedDownloadUrl = async ({
         const command = new GetObjectCommand({
             Bucket: S3_BUCKET_NAME,
             Key: key,
+            ExpectedBucketOwner: S3_EXPECTED_BUCKET_OWNER,
             ResponseContentDisposition: `attachment; filename="${downloadName}"`,
         });
 

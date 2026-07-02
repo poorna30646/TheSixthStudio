@@ -38,9 +38,24 @@ export const S3_BUCKET_NAME = requireEnvironmentValue(
 
 export const S3_ROOT_FOLDER = normalizeRootFolder(env.AWS_ROOT_FOLDER);
 
-const region = requireEnvironmentValue("AWS_REGION", env.AWS_REGION);
+export const S3_REGION = requireEnvironmentValue(
+    "AWS_REGION",
+    env.AWS_REGION
+);
+export const S3_EXPECTED_BUCKET_OWNER = requireEnvironmentValue(
+    "AWS_EXPECTED_BUCKET_OWNER",
+    env.AWS_EXPECTED_BUCKET_OWNER
+);
+
+if (!/^\d{12}$/.test(S3_EXPECTED_BUCKET_OWNER)) {
+    throw new Error(
+        "AWS_EXPECTED_BUCKET_OWNER must be a 12-digit AWS account ID"
+    );
+}
+
 const hasAccessKey = Boolean(env.AWS_ACCESS_KEY_ID);
 const hasSecretKey = Boolean(env.AWS_SECRET_ACCESS_KEY);
+const hasSessionToken = Boolean(env.AWS_SESSION_TOKEN);
 
 if (hasAccessKey !== hasSecretKey) {
     throw new Error(
@@ -48,19 +63,24 @@ if (hasAccessKey !== hasSecretKey) {
     );
 }
 
+if (hasSessionToken && (!hasAccessKey || !hasSecretKey)) {
+    throw new Error(
+        "AWS_SESSION_TOKEN requires AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
+    );
+}
+
+if (env.NODE_ENV === "production" && hasAccessKey && !hasSessionToken) {
+    throw new Error(
+        "Long-lived AWS access keys are not supported in production; use an AWS execution role"
+    );
+}
+
 const s3Client = new S3Client({
-    region,
+    region: S3_REGION,
+    forcePathStyle: false,
     maxAttempts: 3,
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
-    ...(hasAccessKey && hasSecretKey
-        ? {
-              credentials: {
-                  accessKeyId: env.AWS_ACCESS_KEY_ID,
-                  secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
-              },
-          }
-        : {}),
 });
 
 export default s3Client;

@@ -38,6 +38,14 @@ class AssetRepository {
         return this.model.findOne(filter);
     }
 
+    async findPendingByKeyForUser(key, userId) {
+        return this.model.findOne({
+            key,
+            user: userId,
+            status: "pending",
+        });
+    }
+
     async findAccessibleById(assetId, user) {
         const filter = { _id: assetId, status: { $ne: "deleted" } };
         if (user.role !== "admin") filter.user = user.userId;
@@ -132,6 +140,39 @@ class AssetRepository {
             );
         } catch (error) {
             throw new ApiError(422, `Unable to update asset: ${error.message}`);
+        }
+    }
+
+    async finalizePendingByKey(
+        key,
+        userId,
+        { metadata, isPublic }
+    ) {
+        try {
+            return await this.model.findOneAndUpdate(
+                {
+                    key,
+                    user: userId,
+                    status: "pending",
+                },
+                {
+                    $set: {
+                        status: "ready",
+                        metadata,
+                        isPublic,
+                    },
+                },
+                {
+                    new: true,
+                    runValidators: true,
+                }
+            );
+        } catch (error) {
+            if (error instanceof ApiError) throw error;
+            throw new ApiError(
+                422,
+                `Unable to finalize asset: ${error.message}`
+            );
         }
     }
 

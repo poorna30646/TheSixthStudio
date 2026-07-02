@@ -157,12 +157,8 @@ export const validateUpdateAsset = [
         .optional()
         .isBoolean({ strict: true })
         .withMessage("isPublic must be a boolean"),
-    body("status")
-        .optional()
-        .isIn(["ready", "failed"])
-        .withMessage("status must be ready or failed"),
     body().custom((value) => {
-        const allowed = new Set(["metadata", "isPublic", "status"]);
+        const allowed = new Set(["metadata", "isPublic"]);
         const keys = Object.keys(value);
         if (!keys.length) throw new Error("At least one update field is required");
         const unknown = keys.filter((key) => !allowed.has(key));

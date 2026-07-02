@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Private S3 storage and least-privilege runtime access for TheSixthStudio server
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Globally unique S3 bucket name
+  RootPrefix:
+    Type: String
+    Default: thesixthstudio
+    AllowedPattern: "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+  ApplicationRoleName:
+    Type: String
+    Description: Existing ECS, EC2, Lambda, or other application execution role name
+  AllowedOrigins:
+    Type: CommaDelimitedList
+    Description: Exact HTTPS frontend origins allowed to use presigned URLs
+
+Resources:
+  StorageBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref BucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - content-type
+              - if-none-match
+              - x-amz-meta-original-name
+              - x-amz-meta-uploaded-by
+              - x-amz-server-side-encryption
+            AllowedMethods:
+              - GET
+              - HEAD
+              - PUT
+            AllowedOrigins: !Ref AllowedOrigins
+            ExposedHeaders:
+              - ETag
+            MaxAge: 3600
+      LifecycleConfiguration:
+        Rules:
+          - Id: RemoveNoncurrentVersions
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+            Status: Enabled
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  StorageBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref StorageBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt StorageBucket.Arn
+              - !Sub "${StorageBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+          - Sid: DenyUploadsWithoutAES256
+            Effect: Deny
+            Principal: "*"
+            Action: s3:PutObject
+            Resource: !Sub "${StorageBucket.Arn}/${RootPrefix}/*"
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: AES256
+
+  RuntimeStoragePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: TheSixthStudioStorageRuntime
+      Roles:
+        - !Ref ApplicationRoleName
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ObjectOperationsWithinApplicationPrefix
+            Effect: Allow
+            Action:
+              - s3:DeleteObject
+              - s3:GetObject
+              - s3:PutObject
+            Resource: !Sub "${StorageBucket.Arn}/${RootPrefix}/*"
+
+Outputs:
+  BucketName:
+    Value: !Ref StorageBucket
+  BucketOwnerAccountId:
+    Value: !Ref AWS::AccountId
+  RootPrefix:
+    Value: !Ref RootPrefix

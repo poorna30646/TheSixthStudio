@@ -4,7 +4,10 @@ import assetRepository from "../../assets/asset.repository.js";
 import projectRepository from "../../projects/project.repository.js";
 import templateRepository from "../../templates/template.repository.js";
 import videoRepository from "../../videos/video.repository.js";
-import s3Client, { S3_BUCKET_NAME } from "../config/s3.config.js";
+import s3Client, {
+    S3_BUCKET_NAME,
+    S3_EXPECTED_BUCKET_OWNER,
+} from "../config/s3.config.js";
 import {
     assertObjectKeyAccess,
     assertUploaderAccess,
@@ -32,6 +35,7 @@ export const deleteObject = async ({ key, user }) => {
             new DeleteObjectCommand({
                 Bucket: S3_BUCKET_NAME,
                 Key: key,
+                ExpectedBucketOwner: S3_EXPECTED_BUCKET_OWNER,
             })
         );
         const asset = await assetRepository.markDeletedByKey(key);
